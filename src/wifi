@@ -31,6 +31,11 @@
 # forget ACCESSPOINT
 # 	Forget the access point and password
 #
+# License:
+#
+# (C) 2017 Tai Kedzierski
+# Released under GNU General Public License v3
+#
 ###/doc
 
 #%include bashout autohelp askuser
