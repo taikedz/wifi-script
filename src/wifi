@@ -7,130 +7,137 @@
 # USAGE
 # =====
 #
-# 	nmcli [ list | start | stop | restart | connect ACCESSPOINT [PASSWORD] | forget ACCESSPOINT ]
+#     wifi [ list | start | stop | restart | connect ACCESSPOINT [PASSWORD] | forget ACCESSPOINT ]
 #
 # list
-# 	Lists available access points
+#     Lists available access points
 #
 # start
-# 	Activates the wifi device
+#     Activates the wifi device
 #
 # stop
-# 	Stop the wifi device
+#     Stop the wifi device
 #
 # restart
-# 	Restart the wifi device
+#     Restart the wifi device
 #
 # connect [ ACCESSPOINT [ PASSWORD ] ]
-# 	Connect to the given access point, optionally providing a password
-# 	If the password is provided, it is saved for future use.
-# 	If the password is not provided, but a saved password exists, that saved password is used.
+#     Connect to the given access point, optionally providing a password
+#     If the password is provided, it is saved for future use.
+#     If the password is not provided, but a saved password exists, that saved password is used.
 #
-# 	If neither ACCESSPOINT nor PASSWORD are provided, you will be given a choice of any of the available networks you have previosuly connected to.
+#     If neither ACCESSPOINT nor PASSWORD are provided, you will be given a choice of any of the available networks you have previosuly connected to.
 #
 # forget ACCESSPOINT
-# 	Forget the access point and password
+#     Forget the access point and password
 #
 # License:
 #
-# (C) 2017 Tai Kedzierski
+# (C) 2018 Tai Kedzierski
 # Released under GNU General Public License v3
 #
 ###/doc
 
-#%include bashout autohelp askuser
-
-if [[ -z "$(which nmcli)" ]]; then
-	faile 'Required program `nmcli` not found.'
-fi
-
-if [[ -z "$*" ]]; then
-	nmcli connection show --active | grep wireless
-	exit
-fi
-
-WIFICMD="$1" ; shift
+#%include out.sh autohelp.sh askuser.sh bincheck.sh
 
 function getaccesspoint {
-	local knownnetworks=$(nmcli connection show|sed -r 's/  +/;/g'|cut -d";" -f1|sed -r -e 's/ [0-9]+$//' -e 's/$/;/'|egrep -v '^NAME$'|sort|uniq|xargs echo|sed 's/; /|/g')
-	uchoose "Connect to which network?" "$(nmcli device wifi list | sed -r 's/  +/;/g' |tail -n +2| cut -d';' -f2|egrep "$knownnetworks")"
+    local knownnetworks
+    knownnetworks=$(nmcli connection show|sed -r 's/  +/;/g'|cut -d";" -f1|sed -r -e 's/ [0-9]+$//' -e 's/$/;/'|egrep -v '^NAME$'|sort|uniq|xargs echo|sed 's/; /|/g')
+    askuser:choose "Connect to which network?" "$(nmcli device wifi list | sed -r 's/  +/;/g' |tail -n +2| cut -d';' -f2|egrep "$knownnetworks")"
 }
 
 function newconn {
-	WIFI_AP="$1"; shift
-	WIFI_PW="$1"; shift
+    local wifi_ap wifi_pw res
 
-	infoe "Trying to establish new connection ..."
+    wifi_ap="$1"; shift
+    wifi_pw="$1"; shift
 
-	if [[ -n "$WIFI_PW" ]]; then
-		nmcli device wifi connect "$WIFI_AP" password "$WIFI_PW" ; RES=$?
-	else
-		nmcli device wifi connect "$WIFI_AP" ; RES="$?"
-	fi
+    out:info "Trying to establish new connection ..."
 
-	return "$RES"
+    if [[ -n "$wifi_pw" ]]; then
+        nmcli device wifi connect "$wifi_ap" password "$wifi_pw" ; res="$?"
+    else
+        nmcli device wifi connect "$wifi_ap" ; res="$?"
+    fi
+
+    return "$res"
 }
 
 function oldconn {
-	WIFI_AP="$1"; shift
-	infoe "Trying old connections ..."
+    local wifi_ap res
 
-	nmcli connection up "$WIFI_AP" ; RES=$?
+    wifi_ap="$1"; shift
+    out:info "Trying old connections ..."
 
-	return "$RES"
+    nmcli connection up "$wifi_ap" ; res="$?"
+
+    return "$res"
 }
 
-case "$WIFICMD" in
-	restart)
-		debuge Deactivating wifi
-		nmcli radio wifi off
+main() {
 
-		debuge Re-activating wifi
-		nmcli radio wifi on
+    bincheck:has nmcli || out:fail 'Required program `nmcli` not found.'
 
-		infoe Done.
-		;;
-	stop)
-		debuge Deactivating wifi
-		nmcli radio wifi off
-		infoe Done.
-		;;
-	start)
-		debuge Re-activating wifi
-		nmcli radio wifi on
-		infoe Done.
-		;;
-	connect)
-		nmcli device wifi rescan
-		WIFI_AP="$1"; shift
-		WIFI_PW="$1"; shift
+    if [[ -z "$*" ]]; then
+        nmcli connection show --active | grep wireless
+        exit 0
+    fi
 
-		if [[ -z  "$WIFI_AP" ]]; then
-			WIFI_AP=$(getaccesspoint)
-		fi
-		infoe "Connecting to $WIFI_AP"
+    WIFICMD="$1" ; shift
 
-		oldconn "$WIFI_AP" || newconn "$WIFI_AP" "$WIFI_PW"
-		;;
-	forget)
-		WIFI_AP="$1"; shift
-		nmcli connection delete "$WIFI_AP" && {
-			infoe Done.
-		}
-		;;
-	list)
-		nmcli device wifi rescan
-		nmcli device wifi list
-		;;
-	old)
-		WIFI_AP="$1" ; shift
-		if [[ -z "$WIFI_AP" ]]; then
-			nmcli connection show|grep wireless
-		else
-			nmcli connection show "$WIFI_AP"|grep wireless
-		fi
-		;;
-	*)
-		faile "Invalid command $WIFICMD"
-		;;
-esac
+    dispatch_command
+}
+
+dispatch_command() {
+    local wifi_ap wifi_pw
+    case "$WIFICMD" in
+        restart)
+            nmcli radio wifi off
+            nmcli radio wifi on
+
+            out:info "Done."
+            ;;
+        stop)
+            nmcli radio wifi off
+            out:info Done.
+            ;;
+        start)
+            nmcli radio wifi on
+            out:info Done.
+            ;;
+        connect)
+            nmcli device wifi rescan
+
+            wifi_ap="${1:-}"; shift || out:fail "No access point specified"
+            wifi_pw="${1:-}"; shift || :
+
+            if [[ -z  "$wifi_ap" ]]; then
+                wifi_ap="$(getaccesspoint)"
+            fi
+            out:info "Connecting to $wifi_ap"
+
+            oldconn "$wifi_ap" || newconn "$wifi_ap" "$wifi_pw"
+            ;;
+        forget)
+            wifi_ap="$1"; shift
+            nmcli connection delete "$wifi_ap" && out:info Done. || out:fail "Could not delete '$wifi_ap'"
+            ;;
+        list)
+            nmcli device wifi rescan
+            nmcli device wifi list
+            ;;
+        old)
+            wifi_ap="$1" ; shift
+            if [[ -z "$wifi_ap" ]]; then
+                nmcli connection show|grep wireless
+            else
+                nmcli connection show "$wifi_ap"|grep wireless
+            fi
+            ;;
+        *)
+            out:fail "Invalid command $WIFICMD"
+            ;;
+    esac
+}
+
+main "$@"

@@ -7,212 +7,411 @@
 # USAGE
 # =====
 #
-# 	wifi [ list | start | stop | restart | connect ACCESSPOINT [PASSWORD] | forget ACCESSPOINT ]
+#     wifi [ list | start | stop | restart | connect ACCESSPOINT [PASSWORD] | forget ACCESSPOINT ]
 #
 # list
-# 	Lists available access points
+#     Lists available access points
 #
 # start
-# 	Activates the wifi device
+#     Activates the wifi device
 #
 # stop
-# 	Stop the wifi device
+#     Stop the wifi device
 #
 # restart
-# 	Restart the wifi device
+#     Restart the wifi device
 #
 # connect [ ACCESSPOINT [ PASSWORD ] ]
-# 	Connect to the given access point, optionally providing a password
-# 	If the password is provided, it is saved for future use.
-# 	If the password is not provided, but a saved password exists, that saved password is used.
+#     Connect to the given access point, optionally providing a password
+#     If the password is provided, it is saved for future use.
+#     If the password is not provided, but a saved password exists, that saved password is used.
 #
-# 	If neither ACCESSPOINT nor PASSWORD are provided, you will be given a choice of any of the available networks you have previosuly connected to.
+#     If neither ACCESSPOINT nor PASSWORD are provided, you will be given a choice of any of the available networks you have previosuly connected to.
 #
 # forget ACCESSPOINT
-# 	Forget the access point and password
+#     Forget the access point and password
 #
 # License:
 #
-# (C) 2017 Tai Kedzierski
+# (C) 2018 Tai Kedzierski
 # Released under GNU General Public License v3
 #
 ###/doc
 
-#!/bin/bash
+##bash-libs: out.sh @ f6496eca (1.1.4)
 
-#!/bin/bash
+##bash-libs: colours.sh @ f6496eca (1.1.4)
 
-export CDEF="[0m"
-export CRED="[31m"
-export CGRN="[32m"
-export CYEL="[33m"
-export CBLU="[34m"
-export CBRED="[1;31m"
-export CBGRN="[1;32m"
-export CBYEL="[1;33m"
-export CBBLU="[1;34m"
-
-MODE_DEBUG=no
-
-### debuge MESSAGE Usage:bbuild
-# print a blue debug message to stderr
-# only prints if MODE_DEBUG is set to "yes"
+### Colours for bash Usage:bbuild
+# A series of colour flags for use in outputs.
+#
+# Example:
+# 	
+# 	echo -e "${CRED}Some red text ${CBBLU} some blue text $CDEF some text in the terminal's default colour")
+#
+# Requires processing of escape characters.
+#
+# Colours available:
+#
+# CRED, CBRED, HLRED -- red, bold red, highlight red
+# CGRN, CBGRN, HLGRN -- green, bold green, highlight green
+# CYEL, CBYEL, HLYEL -- yellow, bold yellow, highlight yellow
+# CBLU, CBBLU, HLBLU -- blue, bold blue, highlight blue
+# CPUR, CBPUR, HLPUR -- purple, bold purple, highlight purple
+# CTEA, CBTEA, HLTEA -- teal, bold teal, highlight teal
+#
+# CDEF -- switches to the terminal default
+# CUNL -- add underline
+#
+# Note that highlight and underline must be applied or re-applied after specifying a colour.
+#
+# If the session is detected as being in a pipe, colours will be turned off.
+#   You can override this by calling `colours:check --color=always` at the start of your script
+#
 ###/doc
-function debuge {
-	if [[ "$MODE_DEBUG" = yes ]]; then
-		echo -e "${CBBLU}DEBUG:$CBLU$*$CDEF" 1>&2
-	fi
+
+##bash-libs: tty.sh @ f6496eca (1.1.4)
+
+tty:is_ssh() {
+    [[ -n "$SSH_TTY" ]] || [[ -n "$SSH_CLIENT" ]] || [[ "$SSH_CONNECTION" ]]
 }
 
-### infoe MESSAGE Usage:bbuild
+tty:is_pipe() {
+    [[ ! -t 1 ]]
+}
+
+### colours:check ARGS Usage:bbuild
+#
+# Check the args to see if there's a `--color=always` or `--color=never`
+#   and reload the colours appropriately
+#
+###/doc
+colours:check() {
+    if [[ "$*" =~ --color=always ]]; then
+        COLOURS_ON=true
+    elif [[ "$*" =~ --color=never ]]; then
+        COLOURS_ON=false
+    fi
+
+    colours:define
+    return 0
+}
+
+colours:auto() {
+    if tty:is_pipe ; then
+        COLOURS_ON=false
+    else
+        COLOURS_ON=true
+    fi
+
+    colours:define
+    return 0
+}
+
+colours:define() {
+    if [[ "$COLOURS_ON" = false ]]; then
+
+        export CRED=''
+        export CGRN=''
+        export CYEL=''
+        export CBLU=''
+        export CPUR=''
+        export CTEA=''
+
+        export CBRED=''
+        export CBGRN=''
+        export CBYEL=''
+        export CBBLU=''
+        export CBPUR=''
+        export CBTEA=''
+
+        export HLRED=''
+        export HLGRN=''
+        export HLYEL=''
+        export HLBLU=''
+        export HLPUR=''
+        export HLTEA=''
+
+        export CDEF=''
+
+    else
+
+        export CRED=$(echo -e "\033[0;31m")
+        export CGRN=$(echo -e "\033[0;32m")
+        export CYEL=$(echo -e "\033[0;33m")
+        export CBLU=$(echo -e "\033[0;34m")
+        export CPUR=$(echo -e "\033[0;35m")
+        export CTEA=$(echo -e "\033[0;36m")
+
+        export CBRED=$(echo -e "\033[1;31m")
+        export CBGRN=$(echo -e "\033[1;32m")
+        export CBYEL=$(echo -e "\033[1;33m")
+        export CBBLU=$(echo -e "\033[1;34m")
+        export CBPUR=$(echo -e "\033[1;35m")
+        export CBTEA=$(echo -e "\033[1;36m")
+
+        export HLRED=$(echo -e "\033[41m")
+        export HLGRN=$(echo -e "\033[42m")
+        export HLYEL=$(echo -e "\033[43m")
+        export HLBLU=$(echo -e "\033[44m")
+        export HLPUR=$(echo -e "\033[45m")
+        export HLTEA=$(echo -e "\033[46m")
+
+        export CDEF=$(echo -e "\033[0m")
+
+    fi
+}
+
+colours:auto
+
+### Console output handlers Usage:bbuild
+#
+# Write data to console stderr using colouring
+#
+###/doc
+
+### out:info MESSAGE Usage:bbuild
 # print a green informational message to stderr
 ###/doc
-function infoe {
-	echo -e "$CGRN$*$CDEF" 1>&2
+function out:info {
+    echo "$CGRN$*$CDEF" 1>&2
 }
 
-### warne MESSAGE Usage:bbuild
+### out:warn MESSAGE Usage:bbuild
 # print a yellow warning message to stderr
 ###/doc
-function warne {
-	echo -e "${CBYEL}WARN:$CYEL $*$CDEF" 1>&2
+function out:warn {
+    echo "${CBYEL}WARN: $CYEL$*$CDEF" 1>&2
 }
 
-### faile MESSAGE CODE Usage:bbuild
+### out:defer MESSAGE Usage:bbuild
+# Store a message in the output buffer for later use
+###/doc
+function out:defer {
+    OUTPUT_BUFFER_defer[${#OUTPUT_BUFFER_defer[@]}]="$*"
+}
+
+# Internal
+function out:buffer_initialize {
+    OUTPUT_BUFFER_defer=(:)
+}
+out:buffer_initialize
+
+### out:flush HANDLER ... Usage:bbuild
+#
+# Pass the output buffer to the command defined by HANDLER
+# and empty the buffer
+#
+# Examples:
+#
+# 	out:flush echo -e
+#
+# 	out:flush out:warn
+#
+# (escaped newlines are added in the buffer, so `-e` option is
+#  needed to process the escape sequences)
+#
+###/doc
+function out:flush {
+    [[ -n "$*" ]] || out:fail "Did not provide a command for buffered output\n\n${OUTPUT_BUFFER_defer[*]}"
+
+    [[ "${#OUTPUT_BUFFER_defer[@]}" -gt 1 ]] || return 0
+
+    for buffer_line in "${OUTPUT_BUFFER_defer[@]:1}"; do
+        "$@" "$buffer_line"
+    done
+
+    out:buffer_initialize
+}
+
+### out:fail [CODE] MESSAGE Usage:bbuild
 # print a red failure message to stderr and exit with CODE
 # CODE must be a number
 # if no code is specified, error code 127 is used
 ###/doc
-function faile {
-	local MSG=
-	local ARG=
-	local ERCODE=127
-	local numpat='^[0-9]+$'
-	while [[ -n "$*" ]]; do
-		ARG=$1 ; shift
-		if [[ -z "$*" ]] && [[ "$ARG" =~ $numpat ]]; then
-			ERCODE=$ARG
-		else
-			MSG="$MSG $ARG"
-		fi
-	done
-	echo "${CBRED}ERROR FAIL:$CRED$MSG$CDEF" 1>&2
-	exit "$ERCODE"
+function out:fail {
+    local ERCODE=127
+    local numpat='^[0-9]+$'
+
+    if [[ "$1" =~ $numpat ]]; then
+        ERCODE="$1"; shift || :
+    fi
+
+    echo "${CBRED}ERROR FAIL: $CRED$*$CDEF" 1>&2
+    exit $ERCODE
 }
 
-function dumpe {
-	echo -n "[1;35m$*" 1>&2
-	echo -n "[0;35m" 1>&2
-	cat - 1>&2
-	echo -n "[0m" 1>&2
+### out:error MESSAGE Usage:bbuild
+# print a red error message to stderr
+#
+# unlike out:fail, does not cause script exit
+###/doc
+function out:error {
+    echo "${CBRED}ERROR: ${CRED}$*$CDEF" 1>&2
 }
+##bash-libs: autohelp.sh @ f6496eca (1.1.4)
 
-if [[ "$*" =~ --debug ]]; then
-	MODE_DEBUG=yes
-fi
-#!/bin/bash
-
-### printhelp Usage:bbuild
+### autohelp:print [ SECTION [FILE] ] Usage:bbuild
 # Write your help as documentation comments in your script
 #
-# If you need to output the help from a running script, call the
-# `printhelp` function and it will print the help documentation
+# If you need to output the help from your script, or a file, call the
+# `autohelp:print` function and it will print the help documentation
 # in the current script to stdout
 #
 # A help comment looks like this:
 #
-#	### <title> Usage:help
-#	#
-#	# <some content>
-#	#
-#	# end with "###/doc" on its own line (whitespaces before
-#	# and after are OK)
-#	#
-#	###/doc
+#    ### <title> Usage:help
+#    #
+#    # <some content>
+#    #
+#    # end with "###/doc" on its own line (whitespaces before
+#    # and after are OK)
+#    #
+#    ###/doc
+#
+# You can set a different help section by specifying a subsection
+#
+# 	autohelp:print section2
+#
+# > This would print a section defined in this way:
+#
+# 	### Some title Usage:section2
+# 	# <some content>
+# 	###/doc
+#
+# You can set a different comment character by setting the 'HELPCHAR' environment variable:
+#
+# 	HELPCHAR=%
 #
 ###/doc
 
-CHAR='#'
+HELPCHAR='#'
 
-function printhelp {
-	USAGESTRING=help
-	TARGETFILE=$0
-	if [[ -n "$*" ]]; then USAGESTRING="$1" ; shift; fi
-	if [[ -n "$*" ]]; then TARGETFILE="$1" ; shift; fi
+function autohelp:print {
+    local SECTION_STRING="${1:-}"; shift || :
+    local TARGETFILE="${1:-}"; shift || :
+    [[ -n "$SECTION_STRING" ]] || SECTION_STRING=help
+    [[ -n "$TARGETFILE" ]] || TARGETFILE="$0"
 
         echo -e "\n$(basename "$TARGETFILE")\n===\n"
-        local SECSTART='^\s*'"$CHAR$CHAR$CHAR"'\s+(.+?)\s+Usage:'"$USAGESTRING"'\s*$'
-        local SECEND='^\s*'"$CHAR$CHAR$CHAR"'\s*/doc\s*$'
-        local insec="$(mktemp --tmpdir)"; rm "$insec"
-        cat "$TARGETFILE" | while read secline; do
+        local SECSTART='^\s*'"$HELPCHAR$HELPCHAR$HELPCHAR"'\s+(.+?)\s+Usage:'"$SECTION_STRING"'\s*$'
+        local SECEND='^\s*'"$HELPCHAR$HELPCHAR$HELPCHAR"'\s*/doc\s*$'
+        local insec=false
+
+        while read secline; do
                 if [[ "$secline" =~ $SECSTART ]]; then
-                        touch "$insec"
+                        insec=true
                         echo -e "\n${BASH_REMATCH[1]}\n---\n"
-                elif [[ -f $insec ]]; then
+
+                elif [[ "$insec" = true ]]; then
                         if [[ "$secline" =~ $SECEND ]]; then
-                                rm "$insec"
+                                insec=false
                         else
-				echo "$secline" | sed -r "s/^\s*$CHAR//g"
+                echo "$secline" | sed -r "s/^\s*$HELPCHAR//g"
                         fi
                 fi
-        done
-        if [[ -f "$insec" ]]; then
+        done < "$TARGETFILE"
+
+        if [[ "$insec" = true ]]; then
                 echo "WARNING: Non-terminated help block." 1>&2
-		rm "$insec"
         fi
-	echo ""
+    echo ""
 }
 
-### automatic help Usage:bbuild
+### autohelp:paged Usage:bbuild
 #
-# automatically call help if "--help" is detected in arguments
+# Display the help in the pager defined in the PAGER environment variable
 #
 ###/doc
-if [[ "$@" =~ --help ]]; then
-	printhelp
-	exit 0
-fi
-#!/bin/bash
+function autohelp:paged {
+    : ${PAGER=less}
+    autohelp:print "$@" | $PAGER
+}
 
-### AskUser Usage:bbuild
-# Present the user with questions on stdout
+### autohelp:check Usage:bbuild
+#
+# Automatically print help and exit if "--help" is detected in arguments
+#
+# Example use:
+#
+#    #!/bin/bash
+#
+#    ### Some help Usage:help
+#    #
+#    # Some help text
+#    #
+#    ###/doc
+#
+#    #%include autohelp.sh
+#
+#    main() {
+#        autohelp:check "$@"
+#
+#        # now add your code
+#    }
+#
+#    main "$@"
+#
+###/doc
+autohelp:check() {
+    if [[ "$*" =~ --help ]]; then
+        cols="$(tput cols)"
+        autohelp:print | fold -w "$cols" -s || autohelp:print
+        exit 0
+    fi
+}
+##bash-libs: askuser.sh @ f6496eca (1.1.4)
+
+### askuser Usage:bbuild
+# Present the user with questions on stderr
 ###/doc
 
 
 yespat='^(yes|YES|y|Y)$'
 numpat='^[0-9]+$'
 rangepat='[0-9]+,[0-9]+'
+listpat='^[0-9 ]+$'
 blankpat='^ *$'
 
-### uconfirm Usage:bbuild
+### askuser:confirm Usage:bbuild
 # Ask the user to confirm a closed question. Defaults to no
 #
 # returns 0 on successfully match 'y' or 'yes'
 # returns 1 otherwise
 ###/doc
-function uconfirm {
-	read -p "$* [y/N] > " 1>&2
-	if [[ "$REPLY" =~ $yespat ]]; then
-		return 0
-	else
-		return 1
-	fi
+function askuser:confirm {
+    read -p "$* [y/N] > " 1>&2
+    if [[ "$REPLY" =~ $yespat ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
-### uask Usage:bbuild
+### askuser:ask Usage:bbuild
 # Ask the user to provide some text
 #
-# returns the entered text
-###
-function uask {
-	read -p "$* : " 1>&2
-	echo $REPLY
+# Echoes out the entered text
+###/doc
+function askuser:ask {
+    read -p "$* : " 1>&2
+    echo "$REPLY"
 }
 
-### uchoose_multi Usage:bbuild
+### askuser:password Usage:bbuild
+# Ask the user to enter a password (does not echo what is typed)
+#
+# Echoes out the entered text
+###/doc
+function askuser:password {
+    read -s -p "$* : " 1>&2
+    echo "$REPLY"
+}
+
+### askuser:choose_multi Usage:bbuild
 # Allows the user to choose from multiple choices
 #
-# uchose_multi MESG CHOICESTRING
+# askuser:chose_multi MESG CHOICESTRING
 #
 #
 # MESG is a single string token that will be displayed as prompt
@@ -224,7 +423,7 @@ function uask {
 # * `"a\\nb\\nc"` - quoted and explicit newline escapes
 # * `"a,b,c"` - quoted and separated with commas
 # * `a , b , c` - not quoted, separated by commas
-# * (and `a`, `b` and `c` on their own lines)
+# * `a`, `b` and `c` on their own lines
 #
 # User input:
 #
@@ -238,142 +437,225 @@ function uask {
 #
 # If the user selects nothing, then function returns 1 and an empty stdout
 ###/doc
-function uchoose_multi {
-	local mesg=$1; shift
-	local choices=$(echo "$*"|sed -r 's/ *, */\n/g')
-	debuge "CHOICES: $choices"
+function askuser:choose_multi {
+    local mesg=$1; shift || :
+    local choices=$(echo "$*"|sed -r 's/ *, */\n/g')
 
-	infoe "$mesg:" 
-	echo -e "$choices"|egrep '^' -n| sed 's/:/: /' 1>&2
-	
-	local sel=$(uask "Choice")
-	if [[ "$sel" =~ $blankpat ]]; then
-		return 1
-	elif [[ "$sel" =~ $numpat ]] || [[ "$sel" =~ $rangepat ]]; then
-		debuge "Number choice [$sel]"
-		echo -e "$choices" | sed -n "$sel p"
-	else
-		debuge "Pattern choice [$sel]"
-		echo -e "$choices"  |egrep "$(echo "$sel"|tr " " '|')"
-	fi
-	return 0
+    out:info "$mesg:" 
+    local choicelist="$(echo -e "$choices"|egrep '^' -n| sed 's/:/: /')"
+    echo "$choicelist" 1>&2
+    
+    local sel=$(askuser:ask "Choice")
+    if [[ "$sel" =~ $blankpat ]]; then
+        return 1
+
+    elif [[ "$sel" =~ $numpat ]] || [[ "$sel" =~ $rangepat ]]; then
+        echo -e "$choices" | sed -n "$sel p"
+    
+    elif [[ "$sel" =~ $listpat ]]; then
+        echo "$choicelist" | egrep "^${sel// /|}:" | sed -r 's/^[0-9]+: //'
+
+    else
+        echo -e "$choices"  |egrep "$(echo "$sel"|tr " " '|')"
+    fi
+    return 0
 }
 
-### uchoose Usage:bbuild
+### askuser:choose Usage:bbuild
 # Ask the user to choose an item
 #
-# Like uchoose_multi, but will loop if the user selects more than one item
+# Like askuser:choose_multi, but will loop if the user selects more than one item
 #
-# If the provides no entry, returns 0
+# If the user provides no entry, returns 1
 #
 # If the user chooses one item, that item is echoed to stdout
 ###/doc
-function uchoose {
-	local mesg=$1; shift
-	while true; do
-		local thechoice="$(uchoose_multi "$mesg" "$*")"
-		local lines=$(echo "$thechoice" | wc -l)
-		if [[ $lines = 1 ]]; then
-			echo "$thechoice"
-			return 0
-		else
-			warne "Too many results"
-		fi
-	done
+function askuser:choose {
+    local mesg=$1; shift || :
+    while true; do
+        local thechoice="$(askuser:choose_multi "$mesg" "$*")"
+        local lines=$(echo -n "$thechoice" | grep '$' -c)
+        if [[ $lines = 1 ]]; then
+            echo "$thechoice"
+            return 0
+        elif [[ $lines = 0 ]]; then
+            return 1
+        else
+            out:warn "Too many results"
+        fi
+    done
+}
+##bash-libs: bincheck.sh @ f6496eca (1.1.4)
+
+### bincheck:get COMMANDS ... Usage:bbuild
+#
+# Return the first existing binary
+#
+# Useful for finding an appropriate binary when you know
+# different systems may supply binaries under different names.
+#
+# Returns the full path from `which` for the first executable
+# encountered.
+#
+# Example:
+#
+# 	bincheck:get markdown_py markdown ./mymarkdown
+#
+# Tries in turn to get a `markdown_py`, then a `markdown`, and then a local `./mymarkdown`
+#
+###/doc
+
+bincheck:get() {
+    local BINEXE=
+    for binname in "$@"; do
+        # Some implementations of `which` print error messages
+        # Not useful here.
+        BINEXE=$(which "$binname" 2>/dev/null)
+
+        if [[ -n "$BINEXE" ]]; then
+            echo "$BINEXE"
+            return 0
+        fi
+    done
+    return 1
 }
 
+### bincheck:has NAMES ... Usage:bbuild
+#
+# Determine if at least one of the binaries listed is present and installed on the system
+#
+###/doc
 
-if [[ -z "$(which nmcli)" ]]; then
-	faile 'Required program `nmcli` not found.'
-fi
+bincheck:has() {
+    [[ -n "$(bincheck:get "$@")" ]]
+}
 
-if [[ -z "$*" ]]; then
-	nmcli connection show --active | grep wireless
-	exit
-fi
+### bincheck:path NAME Usage:bbuild
+#
+# Determine the actual path to the command
+#
+# Relative paths are not expanded.
+#
+###/doc
 
-WIFICMD="$1" ; shift
+bincheck:path() {
+    local binname="$1"; shift || :
+
+    [[ "$binname" =~ / ]] && { 
+        # A relative path cannot be resolved, just check existence
+        [[ -e "$binname" ]] && echo "$binname" || return 1
+
+    } || binname="$(which "$binname" 2>/dev/null)"
+
+    # `which` failed
+    [[ -n "$binname" ]] || return 1
+
+    [[ -h "$binname" ]] && {
+
+        local pointedname="$(ls -l "$binname"|grep -oP "$binname.+"|sed "s|$binname -> ||")"
+        bincheck:path "$pointedname" ; return "$?"
+    
+    } || echo "$binname"
+}
 
 function getaccesspoint {
-	local knownnetworks=$(nmcli connection show|sed -r 's/  +/;/g'|cut -d";" -f1|sed -r -e 's/ [0-9]+$//' -e 's/$/;/'|egrep -v '^NAME$'|sort|uniq|xargs echo|sed 's/; /|/g')
-	uchoose "Connect to which network?" "$(nmcli device wifi list | sed -r 's/  +/;/g' |tail -n +2| cut -d';' -f2|egrep "$knownnetworks")"
+    local knownnetworks
+    knownnetworks=$(nmcli connection show|sed -r 's/  +/;/g'|cut -d";" -f1|sed -r -e 's/ [0-9]+$//' -e 's/$/;/'|egrep -v '^NAME$'|sort|uniq|xargs echo|sed 's/; /|/g')
+    askuser:choose "Connect to which network?" "$(nmcli device wifi list | sed -r 's/  +/;/g' |tail -n +2| cut -d';' -f2|egrep "$knownnetworks")"
 }
 
 function newconn {
-	WIFI_AP="$1"; shift
-	WIFI_PW="$1"; shift
+    local wifi_ap wifi_pw res
 
-	infoe "Trying to establish new connection ..."
+    wifi_ap="$1"; shift
+    wifi_pw="$1"; shift
 
-	if [[ -n "$WIFI_PW" ]]; then
-		nmcli device wifi connect "$WIFI_AP" password "$WIFI_PW" ; RES=$?
-	else
-		nmcli device wifi connect "$WIFI_AP" ; RES="$?"
-	fi
+    out:info "Trying to establish new connection ..."
 
-	return "$RES"
+    if [[ -n "$wifi_pw" ]]; then
+        nmcli device wifi connect "$wifi_ap" password "$wifi_pw" ; res="$?"
+    else
+        nmcli device wifi connect "$wifi_ap" ; res="$?"
+    fi
+
+    return "$res"
 }
 
 function oldconn {
-	WIFI_AP="$1"; shift
-	infoe "Trying old connections ..."
+    local wifi_ap res
 
-	nmcli connection up "$WIFI_AP" ; RES=$?
+    wifi_ap="$1"; shift
+    out:info "Trying old connections ..."
 
-	return "$RES"
+    nmcli connection up "$wifi_ap" ; res="$?"
+
+    return "$res"
 }
 
-case "$WIFICMD" in
-	restart)
-		debuge Deactivating wifi
-		nmcli radio wifi off
+main() {
 
-		debuge Re-activating wifi
-		nmcli radio wifi on
+    bincheck:has nmcli || out:fail 'Required program `nmcli` not found.'
 
-		infoe Done.
-		;;
-	stop)
-		debuge Deactivating wifi
-		nmcli radio wifi off
-		infoe Done.
-		;;
-	start)
-		debuge Re-activating wifi
-		nmcli radio wifi on
-		infoe Done.
-		;;
-	connect)
-		nmcli device wifi rescan
-		WIFI_AP="$1"; shift
-		WIFI_PW="$1"; shift
+    if [[ -z "$*" ]]; then
+        nmcli connection show --active | grep wireless
+        exit 0
+    fi
 
-		if [[ -z  "$WIFI_AP" ]]; then
-			WIFI_AP=$(getaccesspoint)
-		fi
-		infoe "Connecting to $WIFI_AP"
+    WIFICMD="$1" ; shift
 
-		oldconn "$WIFI_AP" || newconn "$WIFI_AP" "$WIFI_PW"
-		;;
-	forget)
-		WIFI_AP="$1"; shift
-		nmcli connection delete "$WIFI_AP" && {
-			infoe Done.
-		}
-		;;
-	list)
-		nmcli device wifi rescan
-		nmcli device wifi list
-		;;
-	old)
-		WIFI_AP="$1" ; shift
-		if [[ -z "$WIFI_AP" ]]; then
-			nmcli connection show|grep wireless
-		else
-			nmcli connection show "$WIFI_AP"|grep wireless
-		fi
-		;;
-	*)
-		faile "Invalid command $WIFICMD"
-		;;
-esac
+    dispatch_command
+}
+
+dispatch_command() {
+    local wifi_ap wifi_pw
+    case "$WIFICMD" in
+        restart)
+            nmcli radio wifi off
+            nmcli radio wifi on
+
+            out:info "Done."
+            ;;
+        stop)
+            nmcli radio wifi off
+            out:info Done.
+            ;;
+        start)
+            nmcli radio wifi on
+            out:info Done.
+            ;;
+        connect)
+            nmcli device wifi rescan
+
+            wifi_ap="${1:-}"; shift || out:fail "No access point specified"
+            wifi_pw="${1:-}"; shift || :
+
+            if [[ -z  "$wifi_ap" ]]; then
+                wifi_ap="$(getaccesspoint)"
+            fi
+            out:info "Connecting to $wifi_ap"
+
+            oldconn "$wifi_ap" || newconn "$wifi_ap" "$wifi_pw"
+            ;;
+        forget)
+            wifi_ap="$1"; shift
+            nmcli connection delete "$wifi_ap" && out:info Done. || out:fail "Could not delete '$wifi_ap'"
+            ;;
+        list)
+            nmcli device wifi rescan
+            nmcli device wifi list
+            ;;
+        old)
+            wifi_ap="$1" ; shift
+            if [[ -z "$wifi_ap" ]]; then
+                nmcli connection show|grep wireless
+            else
+                nmcli connection show "$wifi_ap"|grep wireless
+            fi
+            ;;
+        *)
+            out:fail "Invalid command $WIFICMD"
+            ;;
+    esac
+}
+
+main "$@"
